@@ -23,18 +23,13 @@ Reports on:
 
 Rule Parameters:
 
-+------------------+----------------+--------------------------------------------------------------------------------------------+
-|   Parameter Name | Type           |                                          Description                                       |
-+------------------+----------------+--------------------------------------------------------------------------------------------+
-| WhiteListedVPC   | Optional       | This parameter can be used to white-list VPCs, the white-listed VPCs will not be evaluated |
-|                  |                | and be returned as COMPLIANT. Separate multiple VPCs by a comma.                           |
-+------------------+----------------+--------------------------------------------------------------------------------------------+
-| LogGroupName     | Optional       | This parameter specifies the logGroupName where the flow logs must be sent to.             |
-|                  |                |                                                                                            |
-+------------------+----------------+--------------------------------------------------------------------------------------------+
-| TrafficType      | Optional       | This parameter defines the type of traffic that is being logged for a VPC. By default,     |
-|                  |                | the rule checks for 'ALL'. Possible values are ALL, ACCEPT & REJECT                        |
-+------------------+----------------+--------------------------------------------------------------------------------------------+
++-------------------------+----------------+--------------------------------------------------------------------------------------------+
+|   Parameter Name        | Type           |                                          Description                                       |
++-------------------------+----------------+--------------------------------------------------------------------------------------------+
+| IncludeMemberAccounts   | Optional       | This parameter can be used to check if member accounts will be included, the VPCs of member|
+|                         |                | accounts will be evaluated. Accepted Values are True & False                               |
++-------------------------+----------------+--------------------------------------------------------------------------------------------+
+
 
 Feature:
   In order to: monitor traffic for a VPC
@@ -44,71 +39,29 @@ Feature:
 Scenarios:
 
   Scenario 1:
-    Given: The parameter WhiteListedVPC or TrafficType or LogGroupName is not valid
+    Given: The parameter is not valid
      Then: Raise Exception
 
   Scenario 2:
-    Given: The parameter WhiteListedVPC is configured and valid
-      And: The VPC is in the WhiteListedVPC list
+    Given: The parameter IncludeMemberAccounts is configured to False
+      And: The VPC in the main account has flow logs associated
      Then: Return COMPLIANT
 
   Scenario 3:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The VPC does not have any Flow Logs associated
+    Given: The parameter IncludeMemberAccounts is not configured
+      And: The VPC in main account does not have any Flow Logs associated
      Then: Return NON_COMPLIANT
 
   Scenario 4:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The VPC have no Flow Logs associated with a SUCCESS deliver-log-status
+    Given: The parameter IncludeMemberAccounts is configured to True
+      And: The VPC of one or more member account has no Flow Logs associated
      Then: Return NON_COMPLIANT
-  
+
   Scenario 5:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is not configured
-      And: The parameter LogGroupName is not configured
-      And: The VPC has no Flow Logs associated with TrafficType set to ALL
-     Then: Return NON_COMPLIANT
-
-  Scenario 6:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is not configured
-      And: The parameter LogGroupName is not configured
-      And: The VPC has a Flow Logs associated with TrafficType set to ALL 
-     Then: Return COMPLIANT
-  
-  Scenario 7:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is not configured
-      And: The parameter LogGroupName is configured and valid
-      And: The VPC has no Flow Logs associated with TrafficType set to ALL and the LogGroupName matches the parameter LogGroupName
-     Then: Return NON_COMPLIANT
-  
-  Scenario 8:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is not configured
-      And: The parameter LogGroupName is configured and valid
-      And: The VPC has a Flow Logs associated with TrafficType set to ALL and the LogGroupName matches the parameter LogGroupName
+    Given: The parameter IncludeMemberAccounts is configured to True
+      And: The VPC of every member account has Flow Logs associated
      Then: Return COMPLIANT
 
-  Scenario 9:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is configured and valid
-      And: The VPC has no Flow Logs associated with TrafficType matching the parameter TrafficType
-     Then: Return NON_COMPLIANT
-
-  Scenario 10:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is configured and valid
-      And: The parameter LogGroupName is configured and valid
-      And: The VPC has no Flow Logs associated with TrafficType matching the parameter TrafficType and the LogGroupName matches the parameter LogGroupName
-     Then: Return NON_COMPLIANT
-
-  Scenario 11:
-    Given: The parameter WhiteListedVPC is neither configured nor matching the VPC
-      And: The parameter TrafficType is configured and valid
-      And: The parameter LogGroupName is configured and valid
-      And: The VPC has a Flow Logs associated with TrafficType matching the parameter TrafficType and the LogGroupName matches the parameter LogGroupName
-     Then: Return COMPLIANT
 '''
 
 import json
@@ -124,11 +77,13 @@ import botocore
 DEFAULT_RESOURCE_TYPE = 'AWS::EC2::VPC'
 
 # List of the parameter allowed for the Rule
-ALLOWED_PARAMETER_NAMES = ['WhiteListedVPC', 'TrafficType', 'LogGroupName']
+ALLOWED_PARAMETER_NAMES = ['IncludeMemberAccounts']
 
 # Set to True to get the lambda to assume the Role attached on the Config Service (useful for cross-account).
 ASSUME_ROLE_MODE = True
 
+# List of member accounts
+MEMBER_ACCOUNTS = ["486076294107", "791637495614"]
 #############
 # Main Code #
 #############
@@ -154,52 +109,38 @@ def evaluate_compliance(event, rule_parameters):
     """
 
     evaluations = []
-    
-    ec2_client = get_client('ec2', event)
-    vpc_id_list = get_all_vpc_id(ec2_client)
-    vpc_flow_log_list = get_all_flow_logs(ec2_client, vpc_id_list)
-    print(vpc_flow_log_list)
-
+    vpc_id_list = []
+    all_vpc_ids = []
+    if rule_parameters['IncludeMemberAccounts'] in "True":
+        for member in MEMBER_ACCOUNTS:
+            print("member: "+member)
+            ec2_client = get_client('ec2', member)
+            vpc_id_list = get_all_vpc_id(ec2_client)
+            print(vpc_id_list)
+            all_vpc_ids.extend(vpc_id_list)
+            print(all_vpc_ids)
+            vpc_flow_log_list = get_all_flow_logs(ec2_client, all_vpc_ids)
+            
+            print(vpc_flow_log_list)
+    else:
+        ec2_client = get_client('ec2', "791637495614")
+        vpc_id_list = get_all_vpc_id(ec2_client)
+        vpc_flow_log_list = get_all_flow_logs(ec2_client, vpc_id_list)
+        print(vpc_flow_log_list)
+     
+    vpc_id_list = all_vpc_ids.copy()
     for vpc_id in vpc_id_list:
-        if rule_parameters['WhiteListedVPC']:
-            if vpc_id in rule_parameters['WhiteListedVPC']:
-                evaluations.append(build_evaluation(vpc_id, 'COMPLIANT', event, annotation='This is a WhiteListed VPC.'))
-                continue
-
         flow_log_exist = False
         flow_log_no_error = False
-        traffic_type_matched = False
-        log_group_correct = False
 
         for vpc_flow_log in vpc_flow_log_list:
             if vpc_flow_log['ResourceId'] != vpc_id:
                 continue    
             flow_log_exist = True
             
-            if vpc_flow_log['TrafficType'] != rule_parameters['TrafficType']:
-                continue
-            traffic_type_matched = True
-        
-            if rule_parameters['LogGroupName']:
-                if rule_parameters['LogGroupName'] != vpc_flow_log['LogGroupName']:
-                    continue
-            log_group_correct = True
-            
-            if 'DeliverLogsErrorMessage' in vpc_flow_log:
-                delivery_error_msg = vpc_flow_log['DeliverLogsErrorMessage']
-                continue
-            flow_log_no_error = True
 
         if not flow_log_exist:
             evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation='No flow log has been configured.'))
-            continue
-
-        if not traffic_type_matched:
-            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation='No flow log matches with the traffic type {0}.'.format(rule_parameters['TrafficType'])))
-            continue
-
-        if not log_group_correct:
-            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation='No flow log matches with the log group name {0}.'.format(rule_parameters['LogGroupName'])))
             continue
         
         if not flow_log_no_error:
@@ -244,23 +185,11 @@ def evaluate_parameters(rule_parameters):
 
     validated_rule_parameters = {}
 
-    validated_rule_parameters['WhiteListedVPC'] = []
-    if 'WhiteListedVPC' in rule_parameters:
-        whitelisted_vpcs = rule_parameters['WhiteListedVPC'].replace(' ', '').split(',')
-        for vpc in whitelisted_vpcs:
-            if not vpc.startswith('vpc-'):
-                raise ValueError('The parameter "WhiteListedVPC" is not a valid vpc-id format.')
-        validated_rule_parameters['WhiteListedVPC'] = whitelisted_vpcs
-
-    validated_rule_parameters['TrafficType'] = 'ALL'
-    if 'TrafficType' in rule_parameters:
-        if rule_parameters['TrafficType'] not in ['ACCEPT', 'REJECT', 'ALL']:
-            raise ValueError('The parameter "TrafficType" must be ALL, ACCEPT or REJECT.')  
-        validated_rule_parameters['TrafficType'] = rule_parameters['TrafficType']
-
-    validated_rule_parameters['LogGroupName'] = None
-    if 'LogGroupName' in rule_parameters:
-        validated_rule_parameters['LogGroupName'] = rule_parameters['LogGroupName']
+    validated_rule_parameters['IncludeMemberAccounts'] = 'False'
+    if 'IncludeMemberAccounts' in rule_parameters:
+        if rule_parameters['IncludeMemberAccounts'] not in ['True', 'False']:
+            raise ValueError('The parameter "IncludeMemberAccounts" must be True or False.')  
+        validated_rule_parameters['IncludeMemberAccounts'] = rule_parameters['IncludeMemberAccounts']
 
     return validated_rule_parameters
 
@@ -282,7 +211,7 @@ def build_parameters_value_error_response(ex):
 
 # This gets the client after assuming the Config service role
 # either in the same AWS account or cross-account.
-def get_client(service, event):
+def get_client(service, account):
     """Return the service boto client. It should be used instead of directly calling the client.
 
     Keyword arguments:
@@ -291,8 +220,9 @@ def get_client(service, event):
     """
     if not ASSUME_ROLE_MODE:
         return boto3.client(service)
-    print("RoleArn is: "+event["executionRoleArn"])
-    credentials = get_assume_role_credentials("arn:aws:iam::791637495614:role/pk-custom-config-lambda-role")
+    # print("RoleArn is: "+event["executionRoleArn"])
+    print("In account: "+account)
+    credentials = get_assume_role_credentials("arn:aws:iam::"+account+":role/pk-custom-config-lambda-role")
     # credentials = get_assume_role_credentials(event["executionRoleArn"])
     return boto3.client(service, aws_access_key_id=credentials['AccessKeyId'],
                         aws_secret_access_key=credentials['SecretAccessKey'],
@@ -435,6 +365,7 @@ def lambda_handler(event, context):
     invoking_event = json.loads(event['invokingEvent'])
     print(invoking_event)
     rule_parameters = {}
+    org_account = "791637495614"
     if 'ruleParameters' in event:
         rule_parameters = json.loads(event['ruleParameters'])
     try:  
@@ -444,11 +375,13 @@ def lambda_handler(event, context):
         return build_parameters_value_error_response(ex)
 
     try:
-        AWS_CONFIG_CLIENT = get_client('config', event)
+        AWS_CONFIG_CLIENT = get_client('config', org_account)
         if invoking_event['messageType'] in ['ScheduledNotification']:
             configuration_item = get_configuration_item(invoking_event)
             if is_applicable(configuration_item, event):
                 compliance_result = evaluate_compliance(event, valid_rule_parameters)
+                print("compliance_result")
+                print(compliance_result)
             else:
                 compliance_result = "NOT_APPLICABLE"
         else:
