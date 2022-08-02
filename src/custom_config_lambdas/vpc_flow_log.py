@@ -111,27 +111,32 @@ def evaluate_compliance(event, rule_parameters):
     evaluations = []
     vpc_id_list = []
     all_vpc_ids = []
+    vpc_flow_log_list = []
+    account_list = []
+    all_accounts = []
     if rule_parameters['IncludeMemberAccounts'] in "True":
         for member in MEMBER_ACCOUNTS:
             print("member: "+member)
             ec2_client = get_client('ec2', member)
-            vpc_id_list = get_all_vpc_id(ec2_client)
+            vpc_id_list, account_list = get_all_vpc_id(ec2_client)
             print(vpc_id_list)
             all_vpc_ids.extend(vpc_id_list)
+            all_accounts.extend(account_list)
             print(all_vpc_ids)
-            vpc_flow_log_list = get_all_flow_logs(ec2_client, all_vpc_ids)
+            all_flow_logs = get_all_flow_logs(ec2_client, all_vpc_ids, all_accounts)
+            vpc_flow_log_list.extend(all_flow_logs)
             
             print(vpc_flow_log_list)
     else:
         ec2_client = get_client('ec2', "791637495614")
-        vpc_id_list = get_all_vpc_id(ec2_client)
-        vpc_flow_log_list = get_all_flow_logs(ec2_client, vpc_id_list)
+        vpc_id_list, account_list = get_all_vpc_id(ec2_client)
+        vpc_flow_log_list = get_all_flow_logs(ec2_client, vpc_id_list, account_list)
         print(vpc_flow_log_list)
      
     vpc_id_list = all_vpc_ids.copy()
-    for vpc_id in vpc_id_list:
+    account_list = all_accounts.copy()
+    for vpc_id, account in zip(vpc_id_list, account_list):
         flow_log_exist = False
-        flow_log_no_error = False
 
         for vpc_flow_log in vpc_flow_log_list:
             if vpc_flow_log['ResourceId'] != vpc_id:
@@ -140,18 +145,14 @@ def evaluate_compliance(event, rule_parameters):
             
 
         if not flow_log_exist:
-            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation='No flow log has been configured.'))
-            continue
-        
-        if not flow_log_no_error:
-            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation='The following error occured in the flow log delivery: {0}.'.format(delivery_error_msg)))
+            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation=account+' : No flow log has been configured.'))
             continue
 
-        evaluations.append(build_evaluation(vpc_id, 'COMPLIANT', event))
+        evaluations.append(build_evaluation(vpc_id, 'COMPLIANT', event, annotation=account))
 
     return evaluations
 
-def get_all_flow_logs(ec2_client, vpc_list):
+def get_all_flow_logs(ec2_client, vpc_list, account_list):
     flow_logs = ec2_client.describe_flow_logs(Filters=[{'Name': 'resource-id', 'Values': vpc_list}], MaxResults=1000)
     all_flow_logs = []
     while True:
@@ -165,9 +166,11 @@ def get_all_flow_logs(ec2_client, vpc_list):
 def get_all_vpc_id(ec2_client):
     vpc_list = ec2_client.describe_vpcs()['Vpcs']
     vpc_id_list = []
+    account_list = []
     for vpc in vpc_list:
         vpc_id_list.append(vpc['VpcId'])
-    return vpc_id_list    
+        account_list.append(vpc['OwnerId'])
+    return vpc_id_list, account_list    
 
 def evaluate_parameters(rule_parameters):
     """Evaluate the rule parameters dictionary validity. Raise a ValueError for invalid parameters.
