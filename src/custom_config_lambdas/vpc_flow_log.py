@@ -65,7 +65,7 @@ Scenarios:
 '''
 
 import json
-import datetime
+from src.Config.config import ConfigUtil
 import boto3
 import botocore
 
@@ -83,7 +83,8 @@ ALLOWED_PARAMETER_NAMES = ['IncludeMemberAccounts']
 ASSUME_ROLE_MODE = True
 
 # List of member accounts
-MEMBER_ACCOUNTS = ["486076294107", "791637495614"]
+MEMBER_ACCOUNTS = ConfigUtil.MEMBER_ACCOUNTS
+ORG_ACCOUNT = ConfigUtil.ORG_ACCOUNT
 #############
 # Main Code #
 #############
@@ -128,7 +129,7 @@ def evaluate_compliance(event, rule_parameters):
             
             print(vpc_flow_log_list)
     else:
-        ec2_client = get_client('ec2', "791637495614")
+        ec2_client = get_client('ec2', ORG_ACCOUNT)
         vpc_id_list, account_list = get_all_vpc_id(ec2_client)
         vpc_flow_log_list = get_all_flow_logs(ec2_client, vpc_id_list, account_list)
         print(vpc_flow_log_list)
@@ -368,7 +369,7 @@ def lambda_handler(event, context):
     invoking_event = json.loads(event['invokingEvent'])
     print(invoking_event)
     rule_parameters = {}
-    org_account = "791637495614"
+  
     if 'ruleParameters' in event:
         rule_parameters = json.loads(event['ruleParameters'])
     try:  
@@ -378,7 +379,7 @@ def lambda_handler(event, context):
         return build_parameters_value_error_response(ex)
 
     try:
-        AWS_CONFIG_CLIENT = get_client('config', org_account)
+        AWS_CONFIG_CLIENT = get_client('config', ORG_ACCOUNT)
         if invoking_event['messageType'] in ['ScheduledNotification']:
             configuration_item = get_configuration_item(invoking_event)
             if is_applicable(configuration_item, event):
