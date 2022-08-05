@@ -65,7 +65,7 @@ Scenarios:
 '''
 
 import json
-from src.Config.config import ConfigUtil
+from src.config import ConfigUtil
 import boto3
 import botocore
 
