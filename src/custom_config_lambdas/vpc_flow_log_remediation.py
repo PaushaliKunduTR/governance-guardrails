@@ -9,12 +9,12 @@ def lambda_handler(event, context):
     account_id = event['AccountId']
     execution_id = event['ExecutionId']
     # fl_client = boto3.client('ec2')
-    fl_client = get_client('ec2')
-    response = create_flow_logs(fl_client, vpc_id)
+    fl_client = get_client('ec2',account_id)
+    response = create_flow_logs(fl_client, vpc_id, account_id)
     return response
 
-def get_client(service):
-    credentials = get_assume_role_credentials("arn:aws:iam::486076294107:role/pk-flowlog-config-remediation-org")
+def get_client(service, account_id):
+    credentials = get_assume_role_credentials("arn:aws:iam::"+account_id+":role/pk-flowlog-config-remediation")
     # credentials = get_assume_role_credentials(event["executionRoleArn"])
     return boto3.client(service, aws_access_key_id=credentials['AccessKeyId'],
                         aws_secret_access_key=credentials['SecretAccessKey'],
@@ -36,9 +36,9 @@ def get_assume_role_credentials(role_arn):
             ex.response['Error']['Code'] = "InternalError"
         raise ex
  
-def create_flow_logs(client, vpc_id):
+def create_flow_logs(client, vpc_id, account_id):
     fl_response = client.create_flow_logs(
-        DeliverLogsPermissionArn='arn:aws:iam::486076294107:role/pk-VPCFlowLogs-to-CWL-Role',
+        DeliverLogsPermissionArn='arn:aws:iam::'+account_id+':role/pk-VPCFlowLogs-to-CWL-Role',
         ResourceIds=[
             vpc_id,
         ],
