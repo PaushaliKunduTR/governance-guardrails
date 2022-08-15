@@ -5,7 +5,8 @@
 * Report non-compliant VPC Ids using AWS Config Rule in the main account
 * Upon detection, AWS Config Rule triggers an SSM document which invokes the Remediation Lambda that enables VPC Flow Logs in the non-compliant VPCs.
 
-
+## Architecture Diagram
+![Cross-Account Implementation](images/Multi-Account-Auto-Remediation.png)
 ## Inventory
 This repository contains 2 functions designed to:
 1. Detect Non-Compliant VPCs across multiple accounts - [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log.py)
