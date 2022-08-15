@@ -3,15 +3,41 @@ import boto3
 import datetime
 import botocore
 
+ORG_ACCOUNT = "1111111111111"
+PARAMETER_VALUE = "non_compliant_vpcs_by_account"
+
 def lambda_handler(event, context):
-    print(event)
-    vpc_id = event['VpcId']
-    account_id = event['AccountId']
-    execution_id = event['ExecutionId']
-    # fl_client = boto3.client('ec2')
-    fl_client = get_client('ec2',account_id)
-    response = create_flow_logs(fl_client, vpc_id, account_id)
-    return response
+    print("Remediating VPC: "+event['VpcId'])
+    response_list = []
+    ssm_client = get_client('ssm', ORG_ACCOUNT)
+    non_compliant_data = get_params(ssm_client, PARAMETER_VALUE)
+    for vpc_pair in non_compliant_data:
+        print("loop")
+        print(vpc_pair)
+        vpc_pair = vpc_pair.split(" : ")
+        vpc_id = vpc_pair[0]
+        vpc_id = vpc_id.lstrip("'")
+        print(vpc_id)
+        account_id = vpc_pair[1]
+        account_id = account_id.rstrip("'")
+        print(account_id)
+        if event['VpcId'] in vpc_id:
+            print("creating flow logs... ")
+            fl_client = get_client('ec2',account_id)
+            # response = create_flow_logs(fl_client, vpc_id, account_id)
+            fl_response = fl_client.create_flow_logs(
+                    DeliverLogsPermissionArn='arn:aws:iam::'+account_id+':role/pk-VPCFlowLogs-to-CWL-Role',
+                    ResourceIds=[
+                        event['VpcId'],
+                    ],
+                    ResourceType='VPC',
+                    TrafficType='ALL',
+                    LogGroupName='pk-VPCFlowLogs-custom'
+                )
+            print(fl_response)
+            response_list.append(fl_response)
+            continue
+    return response_list
 
 def get_client(service, account_id):
     credentials = get_assume_role_credentials("arn:aws:iam::"+account_id+":role/pk-flowlog-config-remediation")
@@ -48,4 +74,13 @@ def create_flow_logs(client, vpc_id, account_id):
     )
     return fl_response
 
+def get_params(client, param):
+    response = client.get_parameter(
+            Name=param
+        )
+    parameter = response["Parameter"]
+    value = parameter["Value"]
+    value = value.lstrip("[").rstrip("]")
+    vpc_dict = value.split(',')
+    return vpc_dict
     
