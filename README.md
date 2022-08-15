@@ -8,8 +8,8 @@
 
 ## Inventory
 This repository contains 2 functions designed to:
-1. Detect Non-Compliant VPCs across multiple accounts - [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/vpc_flow_log.py)
-2. Remediate and enable the non-compliant resources upon detection - [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/vpc_flow_log_remediation.py)
+1. Detect Non-Compliant VPCs across multiple accounts - [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log.py)
+2. Remediate and enable the non-compliant resources upon detection - [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log_remediation.py)
 
 It also contains an example YAML used in the SSM Document created to invoke the remediation Lambda
 
@@ -20,11 +20,11 @@ It also contains an example YAML used in the SSM Document created to invoke the 
     * AWS Systems Manager
     * Amazon CloudWatch
     * Amazon VPC
-* Create a Lambda function using example code from [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/vpc_flow_log.py)
+* Create a Lambda function using example code from [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log.py)
 * Create a custom Config Rule and add the ARN of the Lambda function
 * Select Periodic trigger and add "IncludeMemberAccounts" as a parameter key with "True" value
-* Create a Remediation Lambda function using the example code from [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/)
-* Create an SSM Automation Document using the example YAML provided to invoke the Remediation Lambda. Replace assumeRole value in the document with the AutomationAssumeRole created.
+* Create a Remediation Lambda function using the example code from [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log_remediation.py)
+* Create an SSM Automation Document using the example [YAML](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/remediate-flowlog-custom-org.yaml) provided to invoke the Remediation Lambda. Replace assumeRole value in the document with the AutomationAssumeRole created.
 * Select "Manage Remediation" in the Actions menu of the Config Rule and select "Automatic Remediation"
 * Select the created SSM document from "Choose Remediation Action" dropdown
 * Select "ImpactedVPC" as Resource ID Parameter
