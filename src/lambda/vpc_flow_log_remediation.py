@@ -8,7 +8,6 @@ import botocore
 ##############
 
 ORG_ACCOUNT = "1111111111111"
-PARAMETER_VALUE = "non_compliant_vpcs_by_account"
 
 #############
 # Main Code #
@@ -17,29 +16,19 @@ PARAMETER_VALUE = "non_compliant_vpcs_by_account"
 # Lambda Handler to remediate Non-Compliant resource
 def lambda_handler(event, context):
     print("Remediating VPC: "+event['VpcId'])
-    response_list = []
-    ssm_client = get_client('ssm', ORG_ACCOUNT)
-    non_compliant_data = get_params(ssm_client, PARAMETER_VALUE)
-    for vpc_pair in non_compliant_data:
-        vpc_pair = vpc_pair.split(" : ")
-        vpc_id = vpc_pair[0]
-        vpc_id = vpc_id.lstrip("'")
-        account_id = vpc_pair[1]
-        account_id = account_id.rstrip("'")
-        if event['VpcId'] in vpc_id:
-            fl_client = get_client('ec2',account_id)
-            fl_response = fl_client.create_flow_logs(
-                    DeliverLogsPermissionArn='arn:aws:iam::'+account_id+':role/pk-VPCFlowLogs-to-CWL-Role',
-                    ResourceIds=[
-                        event['VpcId'],
-                    ],
-                    ResourceType='VPC',
-                    TrafficType='ALL',
-                    LogGroupName='pk-VPCFlowLogs-custom'
-                )
-            response_list.append(fl_response)
-            continue
-    return response_list
+    config_client = get_client('config', ORG_ACCOUNT)
+    account_id = get_account_id(config_client, event['VpcId'])
+    fl_client = get_client('ec2',account_id)
+    fl_response = fl_client.create_flow_logs(
+            DeliverLogsPermissionArn='arn:aws:iam::'+account_id+':role/pk-VPCFlowLogs-to-CWL-Role',
+            ResourceIds=[
+                event['VpcId'],
+            ],
+            ResourceType='VPC',
+            TrafficType='ALL',
+            LogGroupName='pk-VPCFlowLogs-custom'
+        )
+    return fl_response
 
 # This gets the client after assuming the Config service role
 # either in the same AWS account or cross-account.
@@ -66,14 +55,21 @@ def get_assume_role_credentials(role_arn):
             ex.response['Error']['Code'] = "InternalError"
         raise ex
 
-# Read Parameter Store value to fetch account ids of non-compliant VPCs
-def get_params(client, param):
-    response = client.get_parameter(
-            Name=param
+# Get Account ID from Config Aggregator
+def get_account_id(client, vpc_id):
+    vpc_details = client.list_aggregate_discovered_resources(
+        ConfigurationAggregatorName='test',
+        ResourceType='AWS::EC2::VPC',
+        Filters={
+            'ResourceId': vpc_id,
+            },
         )
-    parameter = response["Parameter"]
-    value = parameter["Value"]
-    value = value.lstrip("[").rstrip("]")
-    vpc_dict = value.split(',')
-    return vpc_dict
+    identifier = vpc_details["ResourceIdentifiers"][0]
+    if identifier['ResourceId'] in vpc_id:
+        print(identifier['SourceAccountId'])
+        account = identifier['SourceAccountId']
+        return account
+    else:
+        return "No account found"
+
     
