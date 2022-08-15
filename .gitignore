@@ -5,3 +5,4 @@ __pycache__/
 Footer
 /.venv
 /.venv/*
+/src/config.py
