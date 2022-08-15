@@ -23,7 +23,7 @@ It also contains an example YAML used in the SSM Document created to invoke the 
 * Create a Lambda function using example code from [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/vpc_flow_log.py)
 * Create a custom Config Rule and add the ARN of the Lambda function
 * Select Periodic trigger and add "IncludeMemberAccounts" as a parameter key with "True" value
-* Create a Remediation Lambda function using the example code from [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/
+* Create a Remediation Lambda function using the example code from [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/custom_config_lambdas/)
 * Create an SSM Automation Document using the example YAML provided to invoke the Remediation Lambda. Replace assumeRole value in the document with the AutomationAssumeRole created.
 * Select "Manage Remediation" in the Actions menu of the Config Rule and select "Automatic Remediation"
 * Select the created SSM document from "Choose Remediation Action" dropdown
