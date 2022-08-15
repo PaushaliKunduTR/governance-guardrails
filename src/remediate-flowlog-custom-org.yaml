@@ -1,0 +1,25 @@
+description: |-
+  # VPC Flow Log Remediation 
+  This Automation Document has been created to remediate VPC Flow Log compliance errors recorded by vpc-flow-logs-enabled config rule
+schemaVersion: '0.3'
+assumeRole: # TODO
+parameters:
+  AutomationAssumeRole:
+    type: String
+    default: pk-flowlog-config-remediation
+  ImpactedVPC:
+    type: String
+    description: (Required) Resource Id of the non-compliant resource
+mainSteps:
+  - name: run_lambda
+    action: 'aws:invokeLambdaFunction'
+    inputs:
+      InvocationType: RequestResponse
+      FunctionName: custom-vpc-flow-logs-remediation
+      InputPayload:
+        VpcId: '{{ ImpactedVPC }}'
+        ExecutionId: '{{ automation:EXECUTION_ID }}'
+    outputs:
+      - Name: message
+        Selector: $.Payload.body
+        Type: String
