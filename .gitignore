@@ -5,3 +5,6 @@ __pycache__/
 Footer
 /.venv
 /.venv/*
+/.vscode
+/.venv/*
+/config.py
