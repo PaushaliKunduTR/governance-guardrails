@@ -83,8 +83,8 @@ ALLOWED_PARAMETER_NAMES = ['IncludeMemberAccounts']
 ASSUME_ROLE_MODE = True
 
 # List of member accounts
-MEMBER_ACCOUNTS = ["486076294107", "791637495614"]
-ORG_ACCOUNT = "791637495614"
+MEMBER_ACCOUNTS = ["22222222222", "1111111111111","33333333333","44444444444"]
+ORG_ACCOUNT = "1111111111111"
 PARAMETER_VALUE = "non_compliant_vpcs_by_account"
 #############
 # Main Code #
@@ -134,7 +134,7 @@ def evaluate_compliance(event, rule_parameters):
             print(all_accounts)
             print(vpc_flow_log_list)
     else:
-        ec2_client, account = get_client('ec2', "791637495614")
+        ec2_client, account = get_client('ec2', "1111111111111")
         vpc_id_list, account = get_all_vpc_id(ec2_client, account)
         vpc_flow_log_list, account = get_all_flow_logs(ec2_client, vpc_id_list, account)
         print(vpc_flow_log_list)
@@ -190,6 +190,7 @@ def store_in_ssm(ssm_client, nc_accounts, nc_vpc_ids):
     value = parameter["Value"]
     value = value.lstrip("[").rstrip("]")
     vpc_dict = value.split(',')
+
     print(vpc_dict)
     for vpc_pair in vpc_dict:
         print(vpc_pair)
