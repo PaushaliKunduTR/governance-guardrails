@@ -1,4 +1,4 @@
-#
+
 # This file made available under CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/legalcode)
 #
 # Created with the Rule Development Kit: https://github.com/awslabs/aws-config-rdk
@@ -65,7 +65,7 @@ Scenarios:
 '''
 
 import json
-from src.config import ConfigUtil
+import datetime
 import boto3
 import botocore
 
@@ -83,8 +83,9 @@ ALLOWED_PARAMETER_NAMES = ['IncludeMemberAccounts']
 ASSUME_ROLE_MODE = True
 
 # List of member accounts
-MEMBER_ACCOUNTS = ConfigUtil.MEMBER_ACCOUNTS
-ORG_ACCOUNT = ConfigUtil.ORG_ACCOUNT
+MEMBER_ACCOUNTS = ["22222222222", "1111111111111","33333333333","44444444444"]
+ORG_ACCOUNT = "1111111111111"
+PARAMETER_VALUE = "non_compliant_vpcs_by_account"
 #############
 # Main Code #
 #############
@@ -115,28 +116,36 @@ def evaluate_compliance(event, rule_parameters):
     vpc_flow_log_list = []
     account_list = []
     all_accounts = []
+    eval_f_accounts = []
+    eval_s_accounts = []
+    non_compliant_vpcs = []
+
     if rule_parameters['IncludeMemberAccounts'] in "True":
         for member in MEMBER_ACCOUNTS:
             print("member: "+member)
-            ec2_client = get_client('ec2', member)
-            vpc_id_list, account_list = get_all_vpc_id(ec2_client)
+            ec2_client, account = get_client('ec2', member)
+            vpc_id_list, account = get_all_vpc_id(ec2_client, member)
             print(vpc_id_list)
             all_vpc_ids.extend(vpc_id_list)
-            all_accounts.extend(account_list)
+            all_accounts.append(member)
             print(all_vpc_ids)
-            all_flow_logs = get_all_flow_logs(ec2_client, all_vpc_ids, all_accounts)
+            all_flow_logs, account = get_all_flow_logs(ec2_client, all_vpc_ids, all_accounts)
             vpc_flow_log_list.extend(all_flow_logs)
-            
+            print(all_accounts)
             print(vpc_flow_log_list)
     else:
-        ec2_client = get_client('ec2', ORG_ACCOUNT)
-        vpc_id_list, account_list = get_all_vpc_id(ec2_client)
-        vpc_flow_log_list = get_all_flow_logs(ec2_client, vpc_id_list, account_list)
+        ec2_client, account = get_client('ec2', "1111111111111")
+        vpc_id_list, account = get_all_vpc_id(ec2_client, account)
+        vpc_flow_log_list, account = get_all_flow_logs(ec2_client, vpc_id_list, account)
         print(vpc_flow_log_list)
      
     vpc_id_list = all_vpc_ids.copy()
     account_list = all_accounts.copy()
+    # print("account list is: ")
+    # for account in all_accounts:
+    #     print(account)  
     for vpc_id, account in zip(vpc_id_list, account_list):
+        print("evaluate compliance for: " + account)
         flow_log_exist = False
 
         for vpc_flow_log in vpc_flow_log_list:
@@ -146,14 +155,49 @@ def evaluate_compliance(event, rule_parameters):
             
 
         if not flow_log_exist:
-            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event, annotation=account+' : No flow log has been configured.'))
+            evaluations.append(build_evaluation(vpc_id, 'NON_COMPLIANT', event,  annotation='No flow log has been configured.'))
+            eval_f_accounts.append(account)
+            non_compliant_vpcs.append(vpc_id)
             continue
 
-        evaluations.append(build_evaluation(vpc_id, 'COMPLIANT', event, annotation=account))
+        evaluations.append(build_evaluation(vpc_id, 'COMPLIANT', event, annotation=''))
+        eval_s_accounts.append(account)
+    
+    ssm_client, account = get_client('ssm', ORG_ACCOUNT)
+    vpc_params = store_in_ssm(ssm_client, eval_f_accounts, non_compliant_vpcs)
+    print(vpc_params)
 
-    return evaluations
+    return evaluations, eval_f_accounts, eval_s_accounts, vpc_params
 
-def get_all_flow_logs(ec2_client, vpc_list, account_list):
+# Store non-compliant vpc info in parameter store
+def store_in_ssm(ssm_client, nc_accounts, nc_vpc_ids):
+    param_list = []
+    for vpc, account in zip(nc_vpc_ids, nc_accounts):
+        param_list.append(vpc+" : "+account)
+    print(param_list)
+    non_compliant_vpcs = ssm_client.put_parameter(
+            Name=PARAMETER_VALUE,
+            Description='Stores non-compliant vpcs across accounts that do not have flow logs enabled',
+            Value=str(param_list),
+            Overwrite=True,
+            Type='StringList',
+            Tier='Standard',
+            DataType='text')
+    response = ssm_client.get_parameter(
+            Name=PARAMETER_VALUE
+        )
+    parameter = response["Parameter"]
+    value = parameter["Value"]
+    value = value.lstrip("[").rstrip("]")
+    vpc_dict = value.split(',')
+
+    print(vpc_dict)
+    for vpc_pair in vpc_dict:
+        print(vpc_pair)
+    return non_compliant_vpcs
+
+
+def get_all_flow_logs(ec2_client, vpc_list, account):
     flow_logs = ec2_client.describe_flow_logs(Filters=[{'Name': 'resource-id', 'Values': vpc_list}], MaxResults=1000)
     all_flow_logs = []
     while True:
@@ -162,16 +206,16 @@ def get_all_flow_logs(ec2_client, vpc_list, account_list):
                 flow_logs = ec2_client.describe_flow_logs(Filters=[{'Name': 'resource-id', 'Values': vpc_list}], NextToken=flow_logs["NextToken"], MaxResults=1000)
         else:
             break
-    return all_flow_logs
+    return all_flow_logs, account
 
-def get_all_vpc_id(ec2_client):
+def get_all_vpc_id(ec2_client, account):
     vpc_list = ec2_client.describe_vpcs()['Vpcs']
     vpc_id_list = []
-    account_list = []
+
     for vpc in vpc_list:
         vpc_id_list.append(vpc['VpcId'])
-        account_list.append(vpc['OwnerId'])
-    return vpc_id_list, account_list    
+
+    return vpc_id_list, account    
 
 def evaluate_parameters(rule_parameters):
     """Evaluate the rule parameters dictionary validity. Raise a ValueError for invalid parameters.
@@ -231,7 +275,7 @@ def get_client(service, account):
     return boto3.client(service, aws_access_key_id=credentials['AccessKeyId'],
                         aws_secret_access_key=credentials['SecretAccessKey'],
                         aws_session_token=credentials['SessionToken']
-                       )
+                       ), account
 
 # This generate an evaluation for config
 def build_evaluation(resource_id, compliance_type, event, resource_type=DEFAULT_RESOURCE_TYPE, annotation=None):
@@ -243,6 +287,7 @@ def build_evaluation(resource_id, compliance_type, event, resource_type=DEFAULT_
     event -- the event variable given in the lambda handler
     resource_type -- the CloudFormation resource type (or AWS::::Account) to report on the rule (default DEFAULT_RESOURCE_TYPE)
     annotation -- an annotation to be added to the evaluation (default None)
+    account -- account id of the 
     """
     eval_cc = {}
     if annotation:
@@ -252,23 +297,6 @@ def build_evaluation(resource_id, compliance_type, event, resource_type=DEFAULT_
     eval_cc['ComplianceType'] = compliance_type
     eval_cc['OrderingTimestamp'] = str(json.loads(event['invokingEvent'])['notificationCreationTime'])
     return eval_cc
-
-def build_evaluation_from_config_item(configuration_item, compliance_type, annotation=None):
-    """Form an evaluation as a dictionary. Usually suited to report on configuration change rules.
-
-    Keyword arguments:
-    configuration_item -- the configurationItem dictionary in the invokingEvent
-    compliance_type -- either COMPLIANT, NON_COMPLIANT or NOT_APPLICABLE
-    annotation -- an annotation to be added to the evaluation (default None)
-    """
-    eval_ci = {}
-    if annotation:
-        eval_ci['Annotation'] = annotation
-    eval_ci['ComplianceResourceType'] = configuration_item['resourceType']
-    eval_ci['ComplianceResourceId'] = configuration_item['resourceId']
-    eval_ci['ComplianceType'] = compliance_type
-    eval_ci['OrderingTimestamp'] = configuration_item['configurationItemCaptureTime']
-    return eval_ci
 
 ####################
 # Boilerplate Code #
@@ -363,13 +391,14 @@ def lambda_handler(event, context):
 
     global AWS_CONFIG_CLIENT
 
+    non_c_account = []
+    c_account = []
     print(event)
     print("event")
     check_defined(event, 'event')
     invoking_event = json.loads(event['invokingEvent'])
     print(invoking_event)
     rule_parameters = {}
-  
     if 'ruleParameters' in event:
         rule_parameters = json.loads(event['ruleParameters'])
     try:  
@@ -379,13 +408,18 @@ def lambda_handler(event, context):
         return build_parameters_value_error_response(ex)
 
     try:
-        AWS_CONFIG_CLIENT = get_client('config', ORG_ACCOUNT)
+        AWS_CONFIG_CLIENT, account = get_client('config', ORG_ACCOUNT)
         if invoking_event['messageType'] in ['ScheduledNotification']:
             configuration_item = get_configuration_item(invoking_event)
             if is_applicable(configuration_item, event):
-                compliance_result = evaluate_compliance(event, valid_rule_parameters)
-                print("compliance_result")
+                # ssm_client, account = get_client('ssm', ORG_ACCOUNT)
+                # old_param = ssm_client.delete_parameter(
+                #                 Name=PARAMETER_VALUE
+                #             )
+                compliance_result, non_c_account, c_account, param_store = evaluate_compliance(event, valid_rule_parameters)
                 print(compliance_result)
+                # non_c_account.append(non_c_account)
+                # c_account.append(c_account)
             else:
                 compliance_result = "NOT_APPLICABLE"
         else:
@@ -401,10 +435,8 @@ def lambda_handler(event, context):
     latest_evaluations = []
 
     if not compliance_result:
-        latest_evaluations.append(build_evaluation(event['accountId'], "NOT_APPLICABLE", event, resource_type='AWS::::Account'))
+        latest_evaluations.append(build_evaluation(event['accountId'], "NOT_APPLICABLE", event, resource_type='AWS::::Account')) ######
         evaluations = clean_up_old_evaluations(latest_evaluations, event)
-    elif isinstance(compliance_result, str):
-        evaluations.append(build_evaluation_from_config_item(configuration_item, compliance_result))
     elif isinstance(compliance_result, list):
         for evaluation in compliance_result:
             missing_fields = False
@@ -416,7 +448,7 @@ def lambda_handler(event, context):
             if not missing_fields:
                 latest_evaluations.append(evaluation)
         evaluations = clean_up_old_evaluations(latest_evaluations, event)
-    elif isinstance(compliance_result, dict):
+    else:
         missing_fields = False
         for field in ('ComplianceResourceType', 'ComplianceResourceId', 'ComplianceType', 'OrderingTimestamp'):
             if field not in compliance_result:
@@ -424,8 +456,6 @@ def lambda_handler(event, context):
                 missing_fields = True
         if not missing_fields:
             evaluations.append(compliance_result)
-    else:
-        evaluations.append(build_evaluation_from_config_item(configuration_item, 'NOT_APPLICABLE'))
 
     # Put together the request that reports the evaluation status
     resultToken = event['resultToken']
@@ -440,7 +470,12 @@ def lambda_handler(event, context):
         AWS_CONFIG_CLIENT.put_evaluations(Evaluations=evaluation_copy[:100], ResultToken=resultToken, TestMode=testMode)
         del evaluation_copy[:100]
     # Used solely for RDK test to be able to test Lambda function
-    return evaluations
+    # print("overall finding: ")
+    print(evaluations)
+    for account in non_c_account:
+        print(account)
+    
+    return evaluations, non_c_account
 
 def is_internal_error(exception):
     return ((not isinstance(exception, botocore.exceptions.ClientError)) or exception.response['Error']['Code'].startswith('5')
