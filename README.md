@@ -5,6 +5,14 @@
 * Report non-compliant VPC Ids using AWS Config Rule in the main account
 * Upon detection, AWS Config Rule triggers an SSM document which invokes the Remediation Lambda that enables VPC Flow Logs in the non-compliant VPCs.
 
+## Workflow
+* AWS Config rule in the Main Account invokes Config Rule Lambda to scan member accounts and check if VPC Flow Logs have been enabled for all the VPCs set up.
+* Config Rule Lambda runs Config Evaluations and shares compliance data with Config Rule.
+* Config Rule flags VPC IDs without Flow Logs Enabled as "Non-Compliant" 
+* Remediation Action is invoked by calling the SSM Automation Document.
+* SSM Automation Document initiates the automation and invokes Remediation Lambda
+* Remediation Lambda reads each Non-Compliant VPC Id from the config input payload and identifies the member account ID using Config Aggregator. The Lambda then assumes cross-account permissions and enables Flow Logs for the non-compliant VPCs
+
 ## Architecture Diagram
 ![Cross-Account Implementation](images/Multi-Account-Guardrail-Auto-Remediation.png)
 ## Inventory
