@@ -12,7 +12,7 @@ This repository contains 2 functions designed to:
 1. Detect Non-Compliant VPCs across multiple accounts - [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log.py)
 2. Remediate and enable the non-compliant resources upon detection - [vpc_flow_log_remediation.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log_remediation.py)
 
-It also contains an example YAML used in the SSM Document created to invoke the remediation Lambda
+It also contains an [example YAML](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/remediate-flowlog-custom-org.yaml) used in the SSM Document created to invoke the remediation Lambda
 
 ## Set Up
 *  Create IAM roles with appropriate cross-account read/write permissions to the resources of the following services:
@@ -21,6 +21,7 @@ It also contains an example YAML used in the SSM Document created to invoke the 
     * AWS Systems Manager
     * Amazon CloudWatch
     * Amazon VPC
+* Create a Config Aggregator in the main account and have the Authorizations set up and approved for member accounts.
 * Create a Lambda function using example code from [vpc_flowlog.py](https://github.com/PaushaliKunduTR/governance-guardrails/blob/main/src/lambda/vpc_flow_log.py)
 * Create a custom Config Rule and add the ARN of the Lambda function
 * Select Periodic trigger and add "IncludeMemberAccounts" as a parameter key with "True" value
