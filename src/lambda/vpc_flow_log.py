@@ -141,9 +141,7 @@ def evaluate_compliance(event, rule_parameters):
      
     vpc_id_list = all_vpc_ids.copy()
     account_list = all_accounts.copy()
-    # print("account list is: ")
-    # for account in all_accounts:
-    #     print(account)  
+
     for vpc_id, account in zip(vpc_id_list, account_list):
         print("evaluate compliance for: " + account)
         flow_log_exist = False
@@ -392,7 +390,6 @@ def lambda_handler(event, context):
     global AWS_CONFIG_CLIENT
 
     non_c_account = []
-    c_account = []
     print(event)
     print("event")
     check_defined(event, 'event')
@@ -412,14 +409,8 @@ def lambda_handler(event, context):
         if invoking_event['messageType'] in ['ScheduledNotification']:
             configuration_item = get_configuration_item(invoking_event)
             if is_applicable(configuration_item, event):
-                # ssm_client, account = get_client('ssm', ORG_ACCOUNT)
-                # old_param = ssm_client.delete_parameter(
-                #                 Name=PARAMETER_VALUE
-                #             )
                 compliance_result, non_c_account, c_account, param_store = evaluate_compliance(event, valid_rule_parameters)
                 print(compliance_result)
-                # non_c_account.append(non_c_account)
-                # c_account.append(c_account)
             else:
                 compliance_result = "NOT_APPLICABLE"
         else:
