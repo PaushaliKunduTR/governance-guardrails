@@ -1,0 +1,31 @@
+{
+    "typeName": "paushalisb::guardraildemo::Hook",
+    "description": "S3 Versioning verification hook",
+    "sourceUrl": "https://github.com/aws-cloudformation/example-sse-hook",
+    "documentationUrl": "https://github.com/aws-cloudformation/example-sse-hook/blob/master/README.md",
+    "typeConfiguration": {
+        "properties": {
+            "excludedBuckets": {
+                "description": "Exceptions for S3 Buckets that should be excluded from Versioning Requirements",
+                "type": "string"
+            }
+        },
+        "additionalProperties": false
+    },
+    "required": [],
+    "handlers": {
+        "preCreate": {
+            "targetNames": [
+                "AWS::S3::Bucket"
+            ],
+            "permissions": []
+        },
+        "preUpdate": {
+            "targetNames": [
+                "AWS::S3::Bucket"
+            ],
+            "permissions": []
+        }
+    },
+    "additionalProperties": false
+}

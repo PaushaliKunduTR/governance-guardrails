@@ -1,0 +1,11 @@
+{
+    "properties": {
+        "excludedBuckets": {
+            "description": "Exceptions for S3 Buckets that should be excluded from Versioning Requirements",
+            "type": "string"
+        }
+    },
+    "additionalProperties": false,
+    "definitions": {},
+    "typeName": "paushalisb::guardraildemo::hook"
+}

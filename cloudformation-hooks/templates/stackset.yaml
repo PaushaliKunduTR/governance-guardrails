@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Registers the hook in the AWS CloudFormation Private Registry, and sets it to a new default resource version.
+
+Parameters:
+  Env:
+    Description: Name of the environment.
+    Type: String
+    AllowedValues:
+      - PRODUCTION
+      - PRE-PRODUCTION
+      - LAB
+    Default: LAB
+
+  FailureMode:
+    Description: Whether to send a warning message or to prevent the provisioning when an error occurs.
+    Type: String
+    AllowedValues:
+      - FAIL
+      - WARN
+    Default: FAIL
+
+  LogRetentionInDays:
+    Description: Retain log events for this number of day(s).
+    Type: String
+    AllowedValues:
+      - 1
+      - 3
+      - 5
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+      - 120
+      - 150
+      - 180
+      - 365
+      - 400
+      - 545
+      - 731
+      - 1827
+      - 3653
+    Default: 30
+
+  SchemaHandlerPackage:
+    Description: URL to the Amazon Simple Storage Service (Amazon S3) bucket where you stored the hook's project ZIP package.
+    Type: String
+    Default: s3://paushali-sb-hook/paushalisb-guardraildemo-hook.zip
+
+  TypeName:
+    Description: Name of the extension.
+    Type: String
+    Default: Paushalisb::Guardraildemo::Hook
+
+Conditions:
+  CreateIAMRole: !Equals
+    - !Ref 'AWS::Region'
+    - us-east-1
+  ReferToIAMRole: !Not
+    - !Equals
+      - !Ref 'AWS::Region'
+      - us-east-1
+
+Resources:
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+              StringLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:type/hook/paushalisb-guardraildemo-hook/*'
+            Effect: Allow
+            Principal:
+              Service:
+                - hooks.cloudformation.amazonaws.com
+                - resources.cloudformation.amazonaws.com
+        Version: "2012-10-17"
+      MaxSessionDuration: 8400
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - cloudformation:DescribeStacks
+                Effect: Allow
+                Resource: '*'
+            Version: "2012-10-17"
+          PolicyName: HookTypePolicy
+      Tags:
+        - Key: Name
+          Value: HookExecutionRole
+        - Key: AppName
+          Value: hook-deployment
+        - Key: Env
+          Value: !Ref 'Env'
+
+  HookDefaultVersion:
+    Type: AWS::CloudFormation::HookDefaultVersion
+    Properties:
+      TypeName: !Ref 'TypeName'
+      VersionId: !GetAtt HookVersion.VersionId
+
+  HookTypeConfig:
+    Type: AWS::CloudFormation::HookTypeConfig
+    DependsOn: HookDefaultVersion
+    Properties:
+      Configuration: !Sub |
+        {
+            "CloudFormationConfiguration": {
+                "HookConfiguration": {
+                    "TargetStacks": "ALL",
+                    "FailureMode": "${FailureMode}",
+                    "Properties": {
+                        "excludedBuckets": []
+                    }
+                }
+            }
+        }
+      TypeArn: !GetAtt HookVersion.TypeArn
+
+  HookVersion:
+    Type: AWS::CloudFormation::HookVersion
+    Properties:
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      LoggingConfig:
+        LogGroupName: !Ref 'LogGroup'
+        LogRoleArn: !GetAtt LogAndMetricsDeliveryRole.Arn
+      SchemaHandlerPackage: !Ref 'SchemaHandlerPackage'
+      TypeName: !Ref 'TypeName'
+  
+  LogAndMetricsDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+            Effect: Allow
+            Principal:
+              Service:
+                - resources.cloudformation.amazonaws.com
+                - hooks.cloudformation.amazonaws.com
+        Version: "2012-10-17"
+      MaxSessionDuration: 43200
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                  - cloudwatch:ListMetrics
+                  - cloudwatch:PutMetricData
+                Effect: Allow
+                Resource: '*'
+            Version: "2012-10-17"
+          PolicyName: LogAndMetricsDeliveryRolePolicy
+      Tags:
+        - Key: Name
+          Value: HookLogAndMetricsDeliveryRole
+        - Key: AppName
+          Value: hook-deployment
+        - Key: Env
+          Value: !Ref 'Env'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: !Ref 'LogRetentionInDays'
+      Tags:
+        - Key: Name
+          Value: HookLogGroup
+        - Key: AppName
+          Value: hook-deployment
+        - Key: Env
+          Value: !Ref 'Env'
+
+Outputs:
+  VersionId:
+    Description: The ID of the hook version.
+    Value: !GetAtt HookVersion.VersionId
